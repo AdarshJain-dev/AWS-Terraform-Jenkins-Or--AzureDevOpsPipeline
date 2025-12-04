@@ -1,0 +1,109 @@
+pipeline {
+    agent any
+
+    environment {
+        TF_VAR_region = "${params.AWS_REGION}"
+    }
+
+    parameters {
+        string(name: 'AWS_REGION', defaultValue: 'ap-south-1', description: 'AWS region to deploy resources')
+        choice(name: 'ENVIRONMENT', choices: ['dev', 'stage', 'prod'], description: 'Select Deployment Environment')
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main', url: 'https://github.com/AdarshJain-dev/AWS-Terraform-Jenkins-Pipeline.git'
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                     credentialsId: 'aws-cred',
+                                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+
+                    bat """
+                    terraform init -backend-config="key=${ENVIRONMENT}/terraform.tfstate"
+                    """
+                }
+            }
+        }
+
+        stage('Terraform Validate') {
+            steps {
+                withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                     credentialsId: 'aws-cred',
+                                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+
+                    bat """
+                    cd terraform
+                    terraform validate
+                    """
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                     credentialsId: 'aws-cred',
+                                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+
+                    bat """
+                    cd terraform
+                    terraform plan
+                    """
+                }
+            }
+        }
+
+        stage('Approval Before Apply') {
+            when {
+                expression { ENVIRONMENT == "prod" }
+            }
+            steps {
+                script {
+                    timeout(time: 5, unit: 'MINUTES') {
+                        input message: "Approve Terraform Apply for PRODUCTION?"
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                     credentialsId: 'aws-cred',
+                                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+
+                    bat """
+                    cd terraform
+                    terraform apply -auto-approve
+                    """
+                }
+            }
+        }
+        stage('Terraform destroy') {
+            steps {
+                withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                                     credentialsId: 'aws-cred',
+                                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+
+                    bat """
+                    terraform destroy --auto-approve"
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Terraform deployment completed successfully for ${ENVIRONMENT}!"
+        }
+        failure {
+            echo "Terraform deployment failed."
+        }
+    }
+}
