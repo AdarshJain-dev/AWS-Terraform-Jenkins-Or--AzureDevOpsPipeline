@@ -1,0 +1,48 @@
+trigger:
+- main
+
+pool:
+  name: 'Agent-VM'
+
+variables:
+- group: AWS-Creds
+
+steps:
+
+# Step 1: Check out Repo
+- checkout: self
+
+# Step 2: Terraform Init
+- task: Bash@3
+  displayName: "Terraform Init"
+  inputs:
+    targetType: 'inline'
+    script: |
+      terraform init
+
+# Step 3: Terraform Validate
+- task: Bash@3
+  displayName: "Terraform Validate"
+  inputs:
+    targetType: 'inline'
+    script: |
+      terraform validate
+
+# Step 4: Terraform Plan
+- task: Bash@3
+  displayName: "Terraform Plan"
+  inputs:
+    targetType: 'inline'
+    script: |
+      terraform plan -out=tfplan
+
+# Step 5: Terraform Apply
+- task: Bash@3
+  displayName: "Terraform Apply"
+  inputs:
+    targetType: 'inline'
+    script: |
+      cd terraform
+      terraform apply -auto-approve tfplan
+
+
